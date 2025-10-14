@@ -155,11 +155,32 @@ async def set_webhook(url: str = None):
     await bot.set_webhook(f"{base}/webhook/{WEBHOOK_SECRET}")
     return {"ok": True, "webhook": f"{base}/webhook/{WEBHOOK_SECRET}"}
 
+from fastapi.responses import JSONResponse
+
 @app.post("/webhook/{secret}")
 async def telegram_webhook(secret: str, request: Request):
     if secret != WEBHOOK_SECRET:
+        # неверный secret — сразу 403
         raise HTTPException(403, "forbidden")
-    data = await request.json()
-    update = types.Update(**data)
-    await dp.process_update(update)
+
+    # Telegram всегда шлёт JSON, но подстрахуемся
+    try:
+        data = await request.json()
+    except Exception as e:
+        # покажем ошибку в логах Render и вернём 200 с описанием
+        print("WEBHOOK JSON ERROR:", e)
+        return JSONResponse({"ok": False, "error": f"bad json: {e}"}, status_code=200)
+
+    try:
+        # корректно создаём Update и отдаём его aiogram
+        update = types.Update(**data)
+        await dp.process_update(update)
+    except Exception as e:
+        # любой сбой внутри aiogram выводим в логи, чтобы было видно причину
+        import traceback
+        print("WEBHOOK UPDATE ERROR:", e)
+        traceback.print_exc()
+        # отвечаем 200, чтобы Telegram не зацикливался на одном апдейте
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
     return {"ok": True}
