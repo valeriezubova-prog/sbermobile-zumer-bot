@@ -144,6 +144,10 @@ async def on_startup():
             pass
 
 @app.get("/")
+@app.get("/ping")
+async def ping():
+    return {"ok": True}
+
 async def root():
     return {"ok": True, "status": "running"}
 
